@@ -21,7 +21,7 @@ if(!io.nsps['/'+req.params.data])
   var nsp = io.of('/'+req.params.data);
   nsp.on('connection', function(socket){
      
-    });
+  });
 }
 res.sendfile(__dirname+"/index.html");
 
