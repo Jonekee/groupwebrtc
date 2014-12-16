@@ -86,71 +86,74 @@ socket.on("setsockets",function(data){
 
 var ConnectObject={};
 var ChannelObject={};
+var Connected={};
 
-function Initialize()
+function Connect(userid)
 {
-	for(var key in friendids)
-	{
-		ConnectObject[friendids[key]]=new RTCPeerConnection(window.iceServers,optionalRtpDataChannels);
-		ChannelObject[friendids[key]]=ConnectObject[friendids[key]].createDataChannel('rtcchannel');
-		ChannelObject[friendids[key]].onmessage=function(event)
-		{
-			console.log(event.data);
-		}
-		ChannelObject[friendids[key]].onopen=function()
-		{
-			channel.send("hello");
-		}
-		ChannelObject[friendids[key]].onerror=function(e){
-			console.log(e);
-		}
+   var connection=new RTCPeerConnection(window.iceServers,optionalRtpDataChannels);
+   var channel=connection.createDataChannel("data");
 
-		ChannelObject[friendids[key]].onclose=function(e){
-			console.log(e);
-		}
-	}
+   channel.onmessage=function(event){console.log(event.data);};
+   channel.onopen=function(){console.log("channel has been opened for "+userid);};
+   channel.onerror=function(error){console.log(error);};
+   channel.onclose=function(error){console.log(error);};
+
+   ConnectObject[userid]=connection;
+   ChannelObject[userid]=channel;
+
+   connection.onsignalingstatechange=function(e){
+   	console.log("state Changed");
+   }
+
+   connection.createOffer(function(offer){
+   	   connection.setLocalDescription(offer);
+   	   socket.emit("emitoffer",{from:myid,toid:userid,data:offer});
+   },ErrorHandler,mediaConstraints);
+
+   connection.onicecandidate=function(event)
+   {
+   	if(!event || !event.candidate)return;
+   	console.log("sending ice candidate");
+   	socket.emit("emitice",{from:myid,toid:userid,data:event.candidate});
+   }
 }
 
-
 socket.on("sendice",function(data){
-	var key=data.from;
-	//console.log(new RTCIceCandidate(data.data));
-	ConnectObject[key].addIceCandidate(new RTCIceCandidate(data.data));
+	console.log("got ice candidate");
+	ConnectObject[data.from].addIceCandidate(new RTCIceCandidate(data.data));
 });
 
 socket.on("reciveoffer",function(data){
-	var key=data.from;
-	console.log("recivng offer from "+key);
-	var obj=ConnectObject[key];
-	obj.setRemoteDescription(new RTCSessionDescription(data.data),function(){
-			obj.createAnswer(function(answer){
-			    obj.setLocalDescription(answer);
-			    socket.emit("emitanswer",{from:myid,toid:key,data:data});
-			});
-	});
+	console.log("recive offer");
+	var connection=new RTCPeerConnection(window.iceServers,optionalRtpDataChannels);
+	var channel=connection.createDataChannel("data");
+	 connection.onicecandidate=function(event)
+   {
+   	if(!event || !event.candidate)return;
+   	console.log("sending ice candidate");
+   	socket.emit("emitice",{from:myid,toid:data.from,data:event.candidate});
+   }
+    channel.onmessage=function(event){console.log(event.data);};
+    channel.onopen=function(){console.log("channel has been opened for "+data.from);
+     channel.send("hi");
+     };
+    channel.onerror=function(error){console.log(error);};
+    channel.onclose=function(error){console.log("channel closed");};
+     ConnectObject[data.from]=connection;
+     ChannelObject[data.from]=channel;
+    connection.setRemoteDescription(new RTCSessionDescription(data.data),function(){
+    	connection.createAnswer(function(answer){
+    	connection.setLocalDescription(answer);
+    	socket.emit("emitanswer",{from:myid,toid:data.from,data:answer});
+    },ErrorHandler,mediaConstraints);
+    });
+    
 });
 
 socket.on("reciveanswer",function(data){
-	var key=data.from;
-	console.log("recivng answer from "+key);
-	var obj=ConnectObject[key];
-	obj.setRemoteDescription(new RTCSessionDescription(data.data));
+	console.log("reciving answer");
+	ConnectObject[data.from].setRemoteDescription(new RTCSessionDescription(data.data));
 });
-function Connect(userid)
-{
-  console.log(ConnectObject);
-  var connection = ConnectObject[userid];
-  connection.onicecandidate=function(event)
-  {
-   if(!event || !event.candidate) return;
-   socket.emit("emitice",{from:myid,toid:userid,data:event.candidate});
-  };
-  connection.createOffer(function(offer){
-  	connection.setLocalDescription(offer);
-  	socket.emit("emitoffer",{from:myid,toid:userid,data:offer});
-  },ErrorHandler,mediaConstraints);
-
-}
 
 
 
